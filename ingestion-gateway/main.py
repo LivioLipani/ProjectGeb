@@ -48,6 +48,10 @@ async def ingest_log(batch: AppLogBatch):
         for item in batch.payload:
             if item.name in ['totalacceleration', 'accelerometer', 'accelerometeruncalibrated']:
                 
+                # Data Quality Gate
+                if last_known_location["lat"] is None or last_known_location["lon"] is None:
+                    continue
+
                 flat_record = {
                     "device_id": batch.deviceId,
                     "session_id": batch.sessionId,
