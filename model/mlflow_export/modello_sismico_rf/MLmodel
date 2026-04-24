@@ -1,0 +1,27 @@
+artifact_path: modello_sismico_rf
+databricks_runtime: client.5.1
+flavors:
+  python_function:
+    data: sparkml
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.spark
+    python_version: 3.12.3
+  spark:
+    code: null
+    model_class: pyspark.ml.pipeline.PipelineModel
+    model_data: sparkml
+    pyspark_version: 4.1.0
+mlflow_version: 3.8.1
+model_id: null
+model_size_bytes: 89557
+model_uuid: 6b09e8b992c34fa69cfebe07cedd45ef
+prompts: null
+run_id: 74d9bee7f498426ea24ddcb2fcda3aee
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+utc_time_created: '2026-04-23 14:39:34.036141'

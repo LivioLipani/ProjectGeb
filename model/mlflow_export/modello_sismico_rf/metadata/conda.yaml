@@ -1,0 +1,9 @@
+channels:
+- conda-forge
+dependencies:
+- python=3.12.3
+- pip<=25.0.1
+- pip:
+  - mlflow==3.8.1
+  - pyspark==4.1.0
+name: mlflow-env

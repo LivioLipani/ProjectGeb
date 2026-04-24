@@ -1,34 +1,91 @@
+# docker-compose.yml  (sezione: Ingestion)
+version: "3.9"
 services:
-  # Message Broker: Redpanda
+  # 1. MESSAGE BROKER — Redpanda (Kafka-compatible)
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v26.1.4
+    image: redpandadata/redpanda:v23.3.11
+    container_name: redpanda
     command:
-      - redpanda start
-      - --smp 1
+      - redpanda
+      - start
       - --overprovisioned
+      - --smp 1
+      - --memory 512M
+      - --reserve-memory 0M
       - --node-id 0
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      # Address the broker advertises to clients that connect to the Kafka API.
-      # Use the internal addresses to connect to the Redpanda brokers'
-      # from inside the same Docker network.
-      # Use the external addresses to connect to the Redpanda brokers'
-      # from outside the Docker network.
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr redpanda:8082
+      - --schema-registry-addr 0.0.0.0:8081
     ports:
-      - "19092:19092" # Accesso da localhost (host)
-      - "9092:9092"   # Accesso interno alla rete Docker
-      - "18081:8081"  # Schema Registry
+      - "${REDPANDA_KAFKA_PORT:-9092}:9092"
+      - "${REDPANDA_PROXY_PORT:-8082}:8082"
+      - "${REDPANDA_SCHEMA_PORT:-8081}:8081"
+    networks:
+      - seismic-net
 
-  # Ingestion Gateway
-  ingestion-gateway:
-    build: ./ingestion-gateway
-    ports:
-      - "8000:8000"
-    environment:
-      - KAFKA_BROKER=redpanda:9092
+  # 1b. TOPIC BOOTSTRAP
+  topic-init:
+    image: redpandadata/redpanda:v23.3.11
+    container_name: topic-init
     depends_on:
       - redpanda
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        sleep 10 && \
+        rpk topic create seismic-raw-data \
+          --brokers redpanda:9092 \
+          --partitions 1 --replicas 1 || true && \
+        rpk topic create seismic-predictions \
+          --brokers redpanda:9092 \
+          --partitions 1 --replicas 1 || true && \
+        echo "Topics ready."
+    networks:
+      - seismic-net
+    restart: "no"
+
+  # 2. PRODUCER — STEAD replay simulator
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: producer
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_TOPIC_RAW: "${KAFKA_TOPIC_RAW:-seismic-raw-data}"
+      METADATA_PATH: "/data/subset_metadata.csv"
+      WAVEFORMS_PATH: "/data/subset_waveforms.h5"
+      PLAYBACK_DELAY_MS: "${PLAYBACK_DELAY_MS:-500}"
+    volumes:
+      - ./data:/data:ro
+    networks:
+      - seismic-net
+    restart: on-failure
+  
+  # 3. INFERENCE WORKER — MLflow consumer/producer
+  inference:
+    build:
+      context: ./inference
+      dockerfile: Dockerfile
+    container_name: inference
+    depends_on:
+      - topic-init
+    environment:
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_TOPIC_RAW: "${KAFKA_TOPIC_RAW:-seismic-raw-data}"
+      KAFKA_TOPIC_PREDICTIONS: "${KAFKA_TOPIC_PREDICTIONS:-seismic-predictions}"
+      KAFKA_GROUP_ID: "${KAFKA_GROUP_ID:-inference-group}"
+      MODEL_PATH: "/model/mlflow_export/modello_sismico_rf"
+    volumes:
+      - ./model:/model:ro
+    networks:
+      - seismic-net
+    restart: on-failure
 
 networks:
-  default:
-    name: seismic-network
+  seismic-net:
+    driver: bridge
