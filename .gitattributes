@@ -1,1 +1,18 @@
+
+* text=auto eol=lf
+
+
 *.h5 filter=lfs diff=lfs merge=lfs -text
+*.parquet binary
+*.snappy binary
+*.pkl    binary
+
+*.py     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.csv    text eol=lf
+*.txt    text eol=lf
+*.md     text eol=lf
+*.sh     text eol=lf
+Dockerfile text eol=lf
