@@ -86,6 +86,29 @@ services:
       - seismic-net
     restart: on-failure
 
+  # 4. STORAGE & API — ClickHouse
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: clickhouse
+    depends_on:
+      - topic-init
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_TCP_PORT:-9000}:9000"
+    volumes:
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - seismic-net
+    restart: unless-stopped
+
 networks:
   seismic-net:
     driver: bridge
+
+volumes:
+  clickhouse-data:
