@@ -95,6 +95,10 @@ services:
     ports:
       - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
       - "${CLICKHOUSE_TCP_PORT:-9000}:9000"
+    environment:
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER:-seismic}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-seismic123}"
+      CLICKHOUSE_DB: "${CLICKHOUSE_DB:-default}"
     volumes:
       - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - clickhouse-data:/var/lib/clickhouse
@@ -106,9 +110,31 @@ services:
       - seismic-net
     restart: unless-stopped
 
+  # 5. VISUALIZATION — Grafana
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    depends_on:
+      - clickhouse
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-seismic123}"
+      GF_INSTALL_PLUGINS: "grafana-clickhouse-datasource"
+      GF_PATHS_PROVISIONING: "/etc/grafana/provisioning"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - seismic-net
+    restart: unless-stopped
+
 networks:
   seismic-net:
     driver: bridge
 
 volumes:
   clickhouse-data:
+  grafana-data:

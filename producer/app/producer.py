@@ -108,44 +108,48 @@ def load_waveform(hf: h5py.File, row: pd.Series) -> np.ndarray | None:
 def main():
     log.info("Loading metadata from %s", METADATA_PATH)
     metadata = pd.read_csv(METADATA_PATH)
-
-    # Shuffle so noise and earthquake rows are interleaved
-    metadata = metadata.sample(frac=1, random_state=42).reset_index(drop=True)
-    log.info("Loaded %d traces (shuffled)", len(metadata))
+    log.info("Loaded %d traces", len(metadata))
 
     producer = build_producer()
 
-    log.info("Opening waveform file %s", WAVEFORMS_PATH)
-    with h5py.File(WAVEFORMS_PATH, "r") as hf:
-        for _, row in metadata.iterrows():
+    run = 0
+    while True:
+        run += 1
+        log.info("Starting replay run #%d", run)
 
-            waveform = load_waveform(hf, row)
-            if waveform is None:
-                continue
+        # Reshuffle on every run so the order is different each time
+        shuffled = metadata.sample(frac=1).reset_index(drop=True)
 
-            payload = build_payload(row, waveform)
+        with h5py.File(WAVEFORMS_PATH, "r") as hf:
+            for _, row in shuffled.iterrows():
 
-            producer.produce(
-                topic=KAFKA_TOPIC_RAW,
-                key=row["trace_name"],
-                value=json.dumps(payload),
-                on_delivery=delivery_report,
-            )
-            producer.poll(0)
+                waveform = load_waveform(hf, row)
+                if waveform is None:
+                    continue
 
-            log.info(
-                "→ [%s] trace=%s  coord_source=%s  lat=%.4f  lon=%.4f",
-                payload["trace_category"],
-                payload["trace_name"],
-                payload["coord_source"],
-                payload["lat"],
-                payload["lon"],
-            )
+                payload = build_payload(row, waveform)
 
-            time.sleep(PLAYBACK_DELAY_MS / 1000.0)
+                producer.produce(
+                    topic=KAFKA_TOPIC_RAW,
+                    key=row["trace_name"],
+                    value=json.dumps(payload),
+                    on_delivery=delivery_report,
+                )
+                producer.poll(0)
 
-    producer.flush()
-    log.info("All traces published. Producer done.")
+                log.info(
+                    "→ [%s] trace=%s  coord_source=%s  lat=%.4f  lon=%.4f",
+                    payload["trace_category"],
+                    payload["trace_name"],
+                    payload["coord_source"],
+                    payload["lat"],
+                    payload["lon"],
+                )
+
+                time.sleep(PLAYBACK_DELAY_MS / 1000.0)
+
+        producer.flush()
+        log.info("Run #%d complete. Restarting...", run)
 
 
 if __name__ == "__main__":
