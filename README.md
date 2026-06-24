@@ -4,7 +4,6 @@
  
 ## Prerequisiti
 - Docker ≥ 24 + Docker Compose v2
-- ≥ 8 GB RAM su Docker
 - Git LFS
 
 ## Struttura cartelle
