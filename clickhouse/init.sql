@@ -1,7 +1,6 @@
--- ──────────────────────────────────────────────
+
 -- 1. KAFKA ENGINE TABLE
 --    Timestamps stored as String to handle ISO 8601 format
--- ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS seismic_predictions_queue
 (
     class         LowCardinality(String),
@@ -24,9 +23,8 @@ SETTINGS
     kafka_skip_broken_messages = 10;
 
 
--- ──────────────────────────────────────────────
+
 -- 2. MERGETREE TABLE
--- ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS seismic_predictions
 (
     class         LowCardinality(String),
@@ -44,10 +42,9 @@ ORDER BY (inference_ts, class)
 PARTITION BY toYYYYMMDD(inference_ts);
 
 
--- ──────────────────────────────────────────────
+
 -- 3. MATERIALIZED VIEW
 --    Parses ISO 8601 strings with timezone into DateTime64
--- ──────────────────────────────────────────────
 CREATE MATERIALIZED VIEW IF NOT EXISTS seismic_predictions_mv
 TO seismic_predictions
 AS
