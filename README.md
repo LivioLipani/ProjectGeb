@@ -62,8 +62,8 @@ docker compose up -d
 | Service | Port |
 |---------|------|
 | Redpanda (Kafka API) | 9092 |
-| Redpanda Admin | 9644 |
-| Redpanda Console | 8080 |
+| Redpanda Pandaproxy | 8082 |
+| Redpanda Schema Registry | 8081 |
 | ClickHouse HTTP | 8123 |
 | ClickHouse native | 9000 |
 | Grafana | 3000 |
