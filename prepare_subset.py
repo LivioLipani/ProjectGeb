@@ -4,9 +4,6 @@ import h5py
 import numpy as np
 import pandas as pd
 
-# ──────────────────────────────────────────────
-# CONFIG
-# ──────────────────────────────────────────────
 N_PER_CLASS    = int(os.getenv("N_PER_CLASS", "500"))
 NOISE_CSV      = os.getenv("NOISE_CSV", "data/noise.csv")
 EARTHQUAKE_CSV = os.getenv("EARTHQUAKE_CSV", "data/local_earthquakes.csv")
@@ -17,10 +14,6 @@ OUTPUT_H5      = os.getenv("OUTPUT_H5", "data/subset_waveforms.h5")
 
 RANDOM_SEED    = 42
 
-
-# ──────────────────────────────────────────────
-# HELPERS
-# ──────────────────────────────────────────────
 def sample_valid_rows(csv_path: str, h5_path: str, n: int, seed: int) -> pd.DataFrame:
     """
     Campiona n righe dal CSV verificando che il waveform
@@ -55,9 +48,6 @@ def copy_waveforms(src_h5: str, rows: pd.DataFrame, dst: h5py.File):
                 dst["data"].create_dataset(trace_name, data=waveform)
 
 
-# ──────────────────────────────────────────────
-# MAIN
-# ──────────────────────────────────────────────
 def main():
     print(f"Sampling {N_PER_CLASS} noise traces...")
     noise_df = sample_valid_rows(NOISE_CSV, NOISE_H5, N_PER_CLASS, RANDOM_SEED)
