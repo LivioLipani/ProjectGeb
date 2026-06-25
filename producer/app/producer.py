@@ -1,4 +1,3 @@
-# producer/app/producer.py
 import os
 import time
 import json
@@ -14,9 +13,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ──────────────────────────────────────────────
-# CONFIG
-# ──────────────────────────────────────────────
+# Environment variables with sensible defaults for local development
 KAFKA_BROKER      = os.getenv("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC_RAW   = os.getenv("KAFKA_TOPIC_RAW", "seismic-raw-data")
 METADATA_PATH     = os.getenv("METADATA_PATH", "/data/metadata.csv")
@@ -24,10 +21,8 @@ WAVEFORMS_PATH    = os.getenv("WAVEFORMS_PATH", "/data/local_earthquakes.h5")
 PLAYBACK_DELAY_MS = int(os.getenv("PLAYBACK_DELAY_MS", "500"))
 
 
-# ──────────────────────────────────────────────
-# KAFKA PRODUCER
-# ──────────────────────────────────────────────
 def build_producer() -> Producer:
+    # Connects to the broker with automatic retry on transient failures
     return Producer({
         "bootstrap.servers": KAFKA_BROKER,
         "linger.ms": 5,
@@ -38,6 +33,7 @@ def build_producer() -> Producer:
 
 
 def delivery_report(err, msg):
+    # Kafka calls this after each send
     if err:
         log.error("Delivery failed for trace %s: %s", msg.key(), err)
     else:
@@ -45,10 +41,8 @@ def delivery_report(err, msg):
                   msg.key(), msg.partition(), msg.offset())
 
 
-# ──────────────────────────────────────────────
-# COORDINATE RESOLUTION
-# ──────────────────────────────────────────────
 def resolve_coordinates(row: pd.Series) -> dict:
+    # Use the epicenter when available, fall back to the station location
     src_lat = row.get("source_latitude")
     src_lon = row.get("source_longitude")
 
@@ -65,10 +59,8 @@ def resolve_coordinates(row: pd.Series) -> dict:
     }
 
 
-# ──────────────────────────────────────────────
-# PAYLOAD BUILDER
-# ──────────────────────────────────────────────
 def build_payload(row: pd.Series, waveform: np.ndarray) -> dict:
+    # Builds the JSON message that gets published to the topic
     coords = resolve_coordinates(row)
 
     return {
@@ -79,13 +71,10 @@ def build_payload(row: pd.Series, waveform: np.ndarray) -> dict:
         "lat":            coords["lat"],
         "lon":            coords["lon"],
         "coord_source":   coords["coord_source"],
-        "waveform":       waveform.tolist(),  # shape (3, 6000) → nested list
+        "waveform":       waveform.tolist(),  # (3, 6000) as a nested list
     }
 
 
-# ──────────────────────────────────────────────
-# HDF5 LOOKUP
-# ──────────────────────────────────────────────
 def load_waveform(hf: h5py.File, row: pd.Series) -> np.ndarray | None:
     trace_name = row["trace_name"]
 
@@ -95,20 +84,17 @@ def load_waveform(hf: h5py.File, row: pd.Series) -> np.ndarray | None:
         log.warning("Trace not found: data/%s — skipping", trace_name)
         return None
 
-    # Normalize to shape (3, 6000) — channels first
+    # Make sure the array is always (channels, samples)
     if waveform.shape == (6000, 3):
         waveform = waveform.T
 
     return waveform
 
 
-# ──────────────────────────────────────────────
-# MAIN LOOP
-# ──────────────────────────────────────────────
 def main():
     log.info("Loading metadata from %s", METADATA_PATH)
     metadata = pd.read_csv(METADATA_PATH)
-    log.info("Loaded %d traces", len(metadata))
+    log.info("%d traces loaded", len(metadata))
 
     producer = build_producer()
 
@@ -117,7 +103,7 @@ def main():
         run += 1
         log.info("Starting replay run #%d", run)
 
-        # Reshuffle on every run so the order is different each time
+        # Shuffle on every run to simulate a realistic stream
         shuffled = metadata.sample(frac=1).reset_index(drop=True)
 
         with h5py.File(WAVEFORMS_PATH, "r") as hf:
@@ -149,7 +135,7 @@ def main():
                 time.sleep(PLAYBACK_DELAY_MS / 1000.0)
 
         producer.flush()
-        log.info("Run #%d complete. Restarting...", run)
+        log.info("Run #%d done. Restarting...", run)
 
 
 if __name__ == "__main__":
