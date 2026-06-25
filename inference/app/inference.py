@@ -1,4 +1,3 @@
-# inference/app/inference.py
 import os
 import json
 import logging
@@ -19,9 +18,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ──────────────────────────────────────────────
-# CONFIG
-# ──────────────────────────────────────────────
+# Environment variables
 KAFKA_BROKER            = os.getenv("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC_RAW         = os.getenv("KAFKA_TOPIC_RAW", "seismic-raw-data")
 KAFKA_TOPIC_PREDICTIONS = os.getenv("KAFKA_TOPIC_PREDICTIONS", "seismic-predictions")
@@ -29,14 +26,12 @@ KAFKA_GROUP_ID          = os.getenv("KAFKA_GROUP_ID", "inference-group")
 MODEL_PATH              = os.getenv("MODEL_PATH", "/model/mlflow_export/modello_sismico_rf")
 
 
-# ──────────────────────────────────────────────
-# SPARK SESSION
-# ──────────────────────────────────────────────
 def build_spark() -> SparkSession:
+    # Use all available cores
     return (
         SparkSession.builder
         .appName("SeismicInference")
-        .master("local[1]")
+        .master("local[*]")
         .config("spark.driver.memory", "1g")
         .config("spark.executor.memory", "1g")
         .config("spark.sql.shuffle.partitions", "1")
@@ -45,11 +40,8 @@ def build_spark() -> SparkSession:
     )
 
 
-# ──────────────────────────────────────────────
-# FEATURE EXTRACTION
-# Identica alla UDF del notebook Databricks
-# ──────────────────────────────────────────────
 def extract_features_from_channel(channel: np.ndarray) -> list:
+    # Mirrors the feature UDF used in the Databricks training notebook
     arr = np.array(channel, dtype=float)
     if len(arr) == 0:
         return [0.0] * 6
@@ -68,21 +60,15 @@ def extract_features_from_channel(channel: np.ndarray) -> list:
 def extract_features(waveform: list) -> np.ndarray:
     w = np.array(waveform, dtype=float)
 
-    # Normalizza a shape (3, 6000) — channels first
+    # the model expects exactly 6 features
     if w.shape == (6000, 3):
-        w = w.T
+        w = w.T  # → (3, 6000)
 
-    features = []
-    for ch in range(3):
-        features.extend(extract_features_from_channel(w[ch]))
-
-    return np.array(features, dtype=float)  # shape: (18,)
+    return np.array(extract_features_from_channel(w[2]), dtype=float)
 
 
-# ──────────────────────────────────────────────
-# INFERENCE
-# ──────────────────────────────────────────────
 def predict(spark: SparkSession, model, features: np.ndarray) -> dict:
+    # Wrap the feature vector in a one-row Spark DataFrame and run the model
     schema = StructType([
         StructField("features", VectorUDT(), True)
     ])
@@ -101,9 +87,6 @@ def predict(spark: SparkSession, model, features: np.ndarray) -> dict:
     return {"class": label, "confidence": confidence}
 
 
-# ──────────────────────────────────────────────
-# KAFKA
-# ──────────────────────────────────────────────
 def build_consumer() -> Consumer:
     return Consumer({
         "bootstrap.servers": KAFKA_BROKER,
@@ -124,28 +107,26 @@ def build_producer() -> Producer:
 
 
 def delivery_report(err, msg):
+    # Kafka calls this after each send
     if err:
         log.error("Delivery failed for trace %s: %s", msg.key(), err)
     else:
-        log.debug("Delivered prediction %s → partition %d offset %d",
+        log.debug("Prediction %s delivered → partition %d offset %d",
                   msg.key(), msg.partition(), msg.offset())
 
 
-# ──────────────────────────────────────────────
-# MAIN LOOP
-# ──────────────────────────────────────────────
 def main():
     log.info("Starting Spark session...")
     spark = build_spark()
 
     log.info("Loading MLflow model from %s", MODEL_PATH)
     model = mlflow.spark.load_model(MODEL_PATH)
-    log.info("Model loaded successfully.")
+    log.info("Model ready.")
 
     consumer = build_consumer()
     producer = build_producer()
     consumer.subscribe([KAFKA_TOPIC_RAW])
-    log.info("Subscribed to topic: %s", KAFKA_TOPIC_RAW)
+    log.info("Listening on topic: %s", KAFKA_TOPIC_RAW)
 
     try:
         while True:

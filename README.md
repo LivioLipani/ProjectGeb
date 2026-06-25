@@ -1,4 +1,15 @@
-﻿# Project Geb
+﻿# Seismic Detection Demo - Project GEB -
+ 
+Final project for the **Technologies for Advanced Programming (TAP)** course —
+Bachelor's degree in Computer Science, University of Catania.
+ 
+The project is a real-time ML pipeline that classifies seismic signals as earthquake or noise.
+A Random Forest model trained on the STEAD dataset runs fully offline inside a Docker Compose environment,
+from data ingestion (Redpanda) through inference (MLflow + Spark) to storage (ClickHouse) and live visualization (Grafana).
+
+
+---
+
 
 # Setup
  
